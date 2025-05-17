@@ -1,22 +1,21 @@
-require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
 const AWS = require('aws-sdk');
 
-// Load secrets
-const { apiKey, agentId } = JSON.parse(process.env.SECRET);
 const {
-  AWS_ACCESS_KEY_ID,
-  AWS_SECRET_ACCESS_KEY,
-  AWS_REGION,
-  S3_BUCKET_NAME
-} = process.env;
+  apiKey,
+  agentId,
+  accessKeyId,
+  secretAccessKey,
+  region,
+  bucket
+} = JSON.parse(process.env.SECRET);
 
-// Configure AWS SDK
+// Configure AWS
 AWS.config.update({
-  accessKeyId: AWS_ACCESS_KEY_ID,
-  secretAccessKey: AWS_SECRET_ACCESS_KEY,
-  region: AWS_REGION
+  accessKeyId,
+  secretAccessKey,
+  region
 });
 const s3 = new AWS.S3();
 
@@ -33,9 +32,7 @@ async function fetchOutput(containerId, retries = MAX_FETCH_RETRIES, delay = FET
       { headers: { 'X-Phantombuster-Key-1': apiKey } }
     );
 
-    if (res.data.output !== null) {
-      return res.data;
-    }
+    if (res.data.output !== null) return res.data;
 
     console.log(`⏳ Output empty, retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
     await new Promise(r => setTimeout(r, delay));
@@ -53,7 +50,7 @@ async function launchAgentWithRetry(retries = MAX_LAUNCH_RETRIES, delay = LAUNCH
       );
       return launchRes.data.containerId;
     } catch (err) {
-      if (err.response && err.response.status === 429) {
+      if (err.response?.status === 429) {
         console.warn(`⚠️ Rate limit hit. Retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
         await new Promise(res => setTimeout(res, delay));
         delay *= 2;
@@ -62,40 +59,36 @@ async function launchAgentWithRetry(retries = MAX_LAUNCH_RETRIES, delay = LAUNCH
       }
     }
   }
-  throw new Error('❌ Failed to launch agent after max retries due to rate limiting');
+  throw new Error('❌ Failed to launch agent after retries');
 }
 
-async function uploadToS3(filePath, bucketName, key) {
+async function uploadToS3(filePath, key) {
   const fileContent = fs.readFileSync(filePath);
-
   const params = {
-    Bucket: bucketName,
+    Bucket: bucket,
     Key: key,
     Body: fileContent,
     ContentType: 'application/json'
   };
 
   await s3.upload(params).promise();
-  console.log(`✅ Uploaded to S3 bucket: ${bucketName} as ${key}`);
+  console.log(`✅ Uploaded to S3 bucket: ${bucket} as ${key}`);
 }
 
 async function run() {
   try {
     console.log(`🚀 Launching PhantomBuster agent with ID: ${agentId}`);
-
     const containerId = await launchAgentWithRetry();
-    console.log(`🟢 Launched agent, container ID: ${containerId}`);
 
+    console.log(`🟢 Launched agent, container ID: ${containerId}`);
     const resultRes = await fetchOutput(containerId);
     const output = JSON.stringify(resultRes, null, 2);
-
-    console.log("✅ Phantom output received:");
 
     const fileName = `phantom_output_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     fs.writeFileSync(fileName, output);
     console.log(`💾 Output saved locally as ${fileName}`);
 
-    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
+    await uploadToS3(fileName, `phantom_outputs/${fileName}`);
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
