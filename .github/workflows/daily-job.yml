@@ -1,0 +1,48 @@
+name: Daily PhantomBuster Scrape and Upload
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # Every day at 2:00 AM UTC
+  workflow_dispatch:     # Also allow manual trigger
+
+jobs:
+  run-scripts:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Set up Node.js environment
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install Node.js dependencies
+      run: npm install
+
+    - name: Run PhantomBuster scrape script
+      env:
+        PHANTOMBUSTER_API_KEY: ${{ secrets.PHANTOMBUSTER_API_KEY }}
+        PHANTOMBUSTER_AGENT_ID: ${{ secrets.PHANTOMBUSTER_AGENT_ID }}
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+        S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+      run: node scrape-and-upload.js
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Python dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run upload to S3 Python script
+      env:
+        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        AWS_REGION: ${{ secrets.AWS_REGION }}
+        S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+      run: python upload-to-s3.py
