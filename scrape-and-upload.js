@@ -1,7 +1,8 @@
-const axios = require('axios');
-const fs = require('fs');
-const AWS = require('aws-sdk');
+const fs = require("fs");
+const axios = require("axios");
+const AWS = require("aws-sdk");
 
+// Load credentials from environment variable
 let credentials;
 try {
   credentials = JSON.parse(process.env.ALL_CREDENTIALS);
@@ -10,102 +11,100 @@ try {
   process.exit(1);
 }
 
-const { apiKey, agentId, accessKeyId, secretAccessKey } = credentials;
 const {
-  AWS_REGION,
-  S3_BUCKET_NAME
-} = process.env;
+  apiKey,
+  agentId,
+  sessionCookie,
+  accessKeyId,
+  secretAccessKey
+} = credentials;
 
-const awsAccessKeyId = accessKeyId || process.env.AWS_ACCESS_KEY_ID;
-const awsSecretAccessKey = secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
+const AWS_REGION = process.env.AWS_REGION;
 
+if (!S3_BUCKET_NAME) {
+  console.error("❌ S3_BUCKET_NAME is not set.");
+  process.exit(1);
+}
+
+// Configure AWS SDK
 AWS.config.update({
-  accessKeyId: awsAccessKeyId,
-  secretAccessKey: awsSecretAccessKey,
-  region: AWS_REGION
+  accessKeyId,
+  secretAccessKey,
+  region: AWS_REGION || "ap-south-1"
 });
+
 const s3 = new AWS.S3();
 
-const MAX_FETCH_RETRIES = 30;
-const FETCH_RETRY_DELAY = 20000;
-const MAX_LAUNCH_RETRIES = 5;
-const LAUNCH_RETRY_DELAY = 10000;
+async function launchPhantomBusterAgent() {
+  console.log("🚀 Launching PhantomBuster agent with ID:", agentId);
 
-async function fetchOutput(containerId, retries = MAX_FETCH_RETRIES, delay = FETCH_RETRY_DELAY) {
-  for (let i = 0; i < retries; i++) {
-    const res = await axios.get(
-      `https://api.phantombuster.com/api/v2/containers/fetch-output?id=${containerId}`,
-      { headers: { 'X-Phantombuster-Key-1': apiKey } }
-    );
-
-    if (res.data.output !== null) {
-      return res.data;
-    }
-
-    console.log(`⏳ Output empty, retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
-    await new Promise(r => setTimeout(r, delay));
-  }
-  throw new Error('❌ Output not ready after max retries');
-}
-
-async function launchAgentWithRetry(retries = MAX_LAUNCH_RETRIES, delay = LAUNCH_RETRY_DELAY) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const launchRes = await axios.post(
-        'https://api.phantombuster.com/api/v2/agents/launch',
-        { id: agentId },
-        { headers: { 'X-Phantombuster-Key-1': apiKey } }
-      );
-      return launchRes.data.containerId;
-    } catch (err) {
-      if (err.response && err.response.status === 429) {
-        console.warn(`⚠️ Rate limit hit. Retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
-        await new Promise(res => setTimeout(res, delay));
-        delay *= 2;
-      } else {
-        throw err;
+  const launchUrl = `https://api.phantombuster.com/api/v2/agents/launch`;
+  const response = await axios.post(
+    launchUrl,
+    { id: agentId },
+    {
+      headers: {
+        "X-Phantombuster-Key-1": apiKey,
+        Cookie: `session=${sessionCookie}`
       }
     }
+  );
+
+  const containerId = response.data.containerId;
+  console.log("🟢 Launched agent, container ID:", containerId);
+
+  const outputUrl = `https://api.phantombuster.com/api/v2/containers/fetch-output?id=${containerId}`;
+  let output;
+
+  for (let i = 0; i < 30; i++) {
+    await new Promise((r) => setTimeout(r, 20000)); // wait 20s
+    const res = await axios.get(outputUrl, {
+      headers: {
+        "X-Phantombuster-Key-1": apiKey,
+        Cookie: `session=${sessionCookie}`
+      }
+    });
+
+    if (res.data.output) {
+      output = res.data.output;
+      break;
+    } else {
+      console.log(`⏳ Output empty, retrying in 20s... (${i + 1}/30)`);
+    }
   }
-  throw new Error('❌ Failed to launch agent after max retries due to rate limiting');
+
+  if (!output) {
+    throw new Error("❌ PhantomBuster output not available after multiple retries.");
+  }
+
+  const filename = `phantom_output_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  fs.writeFileSync(filename, JSON.stringify(output, null, 2));
+  console.log("✅ Phantom output received:");
+  console.log(`💾 Output saved locally as ${filename}`);
+  return filename;
 }
 
-async function uploadToS3(filePath, bucketName, key) {
-  const fileContent = fs.readFileSync(filePath);
+async function uploadToS3(filename) {
+  const fileContent = fs.readFileSync(filename);
 
   const params = {
-    Bucket: bucketName,
-    Key: key,
+    Bucket: S3_BUCKET_NAME,
+    Key: filename,
     Body: fileContent,
-    ContentType: 'application/json'
+    ContentType: "application/json"
   };
 
   await s3.upload(params).promise();
-  console.log(`✅ Uploaded to S3 bucket: ${bucketName} as ${key}`);
+  console.log(`✅ Uploaded ${filename} to S3 bucket: ${S3_BUCKET_NAME}`);
 }
 
-async function run() {
+(async () => {
   try {
-    console.log(`🚀 Launching PhantomBuster agent with ID: ${agentId}`);
-
-    const containerId = await launchAgentWithRetry();
-    console.log(`🟢 Launched agent, container ID: ${containerId}`);
-
-    const resultRes = await fetchOutput(containerId);
-    const output = JSON.stringify(resultRes, null, 2);
-
-    console.log("✅ Phantom output received:");
-
-    const fileName = `phantom_output_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-    fs.writeFileSync(fileName, output);
-    console.log(`💾 Output saved locally as ${fileName}`);
-
-    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
-
-  } catch (err) {
-    console.error("❌ Error:", err.message || err);
+    const filename = await launchPhantomBusterAgent();
+    await uploadToS3(filename);
+  } catch (error) {
+    console.error("❌ Error:", error.message || error);
     process.exit(1);
   }
-}
-
-run();
+})();
