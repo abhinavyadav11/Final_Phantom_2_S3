@@ -5,9 +5,9 @@ const AWS = require('aws-sdk');
 // Parse JSON from the ALL_CREDENTIAL secret
 let credentials;
 try {
-  credentials = JSON.parse(process.env.ALL_CREDENTIAL);
+  credentials = JSON.parse(process.env.ALL_CREDENTIALS);
 } catch (err) {
-  console.error("❌ Failed to parse ALL_CREDENTIAL:", err);
+  console.error("❌ Failed to parse ALL_CREDENTIALS:", err);
   process.exit(1);
 }
 
