@@ -1,110 +1,146 @@
 const fs = require("fs");
-const axios = require("axios");
+const https = require("https");
 const AWS = require("aws-sdk");
 
-// Load credentials from environment variable
-let credentials;
-try {
-  credentials = JSON.parse(process.env.ALL_CREDENTIALS);
-} catch (error) {
-  console.error("❌ Failed to parse ALL_CREDENTIALS:", error);
+const credentials = JSON.parse(process.env.ALL_CREDENTIALS || "{}");
+
+if (
+  !credentials.apiKey ||
+  !credentials.agentId ||
+  !credentials.sessionCookie ||
+  !credentials.accessKeyId ||
+  !credentials.secretAccessKey ||
+  !credentials.bucketName ||
+  !credentials.region
+) {
+  console.error("❌ Missing required fields in ALL_CREDENTIALS");
   process.exit(1);
 }
 
-const {
-  apiKey,
-  agentId,
-  sessionCookie,
-  accessKeyId,
-  secretAccessKey
-} = credentials;
+const { apiKey, agentId, sessionCookie, accessKeyId, secretAccessKey, bucketName, region } = credentials;
 
-const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
-const AWS_REGION = process.env.AWS_REGION;
-
-if (!S3_BUCKET_NAME) {
-  console.error("❌ S3_BUCKET_NAME is not set.");
-  process.exit(1);
-}
-
-// Configure AWS SDK
+// Set AWS config
 AWS.config.update({
   accessKeyId,
   secretAccessKey,
-  region: AWS_REGION || "ap-south-1"
+  region
 });
 
 const s3 = new AWS.S3();
 
-async function launchPhantomBusterAgent() {
-  console.log("🚀 Launching PhantomBuster agent with ID:", agentId);
+const startAgent = () => {
+  console.log(`🚀 Launching PhantomBuster agent with ID: ${agentId}`);
 
-  const launchUrl = `https://api.phantombuster.com/api/v2/agents/launch`;
-  const response = await axios.post(
-    launchUrl,
-    { id: agentId },
-    {
-      headers: {
-        "X-Phantombuster-Key-1": apiKey,
-        Cookie: `session=${sessionCookie}`
-      }
+  const options = {
+    hostname: "api.phantombuster.com",
+    path: `/api/v2/agents/launch`,
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Phantombuster-Key-1": apiKey,
+      "Cookie": `session=${sessionCookie}`
     }
-  );
-
-  const containerId = response.data.containerId;
-  console.log("🟢 Launched agent, container ID:", containerId);
-
-  const outputUrl = `https://api.phantombuster.com/api/v2/containers/fetch-output?id=${containerId}`;
-  let output;
-
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 20000)); // wait 20s
-    const res = await axios.get(outputUrl, {
-      headers: {
-        "X-Phantombuster-Key-1": apiKey,
-        Cookie: `session=${sessionCookie}`
-      }
-    });
-
-    if (res.data.output) {
-      output = res.data.output;
-      break;
-    } else {
-      console.log(`⏳ Output empty, retrying in 20s... (${i + 1}/30)`);
-    }
-  }
-
-  if (!output) {
-    throw new Error("❌ PhantomBuster output not available after multiple retries.");
-  }
-
-  const filename = `phantom_output_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-  fs.writeFileSync(filename, JSON.stringify(output, null, 2));
-  console.log("✅ Phantom output received:");
-  console.log(`💾 Output saved locally as ${filename}`);
-  return filename;
-}
-
-async function uploadToS3(filename) {
-  const fileContent = fs.readFileSync(filename);
-
-  const params = {
-    Bucket: S3_BUCKET_NAME,
-    Key: filename,
-    Body: fileContent,
-    ContentType: "application/json"
   };
 
-  await s3.upload(params).promise();
-  console.log(`✅ Uploaded ${filename} to S3 bucket: ${S3_BUCKET_NAME}`);
-}
+  const postData = JSON.stringify({ id: agentId });
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, res => {
+      let body = "";
+      res.on("data", chunk => (body += chunk));
+      res.on("end", () => {
+        try {
+          const response = JSON.parse(body);
+          const containerId = response?.containerId;
+          if (containerId) {
+            console.log(`🟢 Launched agent, container ID: ${containerId}`);
+            resolve(containerId);
+          } else {
+            reject("❌ Failed to launch agent.");
+          }
+        } catch (err) {
+          reject(`❌ Failed to parse response: ${err}`);
+        }
+      });
+    });
+
+    req.on("error", reject);
+    req.write(postData);
+    req.end();
+  });
+};
+
+const getOutput = containerId => {
+  const options = {
+    hostname: "api.phantombuster.com",
+    path: `/api/v2/containers/fetch-output?id=${containerId}`,
+    method: "GET",
+    headers: {
+      "X-Phantombuster-Key-1": apiKey,
+      "Cookie": `session=${sessionCookie}`
+    }
+  };
+
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, res => {
+      let body = "";
+      res.on("data", chunk => (body += chunk));
+      res.on("end", () => {
+        try {
+          const response = JSON.parse(body);
+          if (response?.status === "success" && response.output) {
+            resolve(response.output);
+          } else {
+            resolve(null); // still pending
+          }
+        } catch (err) {
+          reject(`❌ Error parsing output: ${err}`);
+        }
+      });
+    });
+
+    req.on("error", reject);
+    req.end();
+  });
+};
+
+const uploadToS3 = (filePath, s3Key) => {
+  const fileContent = fs.readFileSync(filePath);
+  const params = {
+    Bucket: bucketName,
+    Key: s3Key,
+    Body: fileContent
+  };
+
+  return s3.upload(params).promise();
+};
 
 (async () => {
   try {
-    const filename = await launchPhantomBusterAgent();
-    await uploadToS3(filename);
+    const containerId = await startAgent();
+
+    let output = null;
+    let retries = 30;
+
+    for (let i = 0; i < retries; i++) {
+      console.log(`⏳ Output empty, retrying in 20s... (${i + 1}/${retries})`);
+      await new Promise(resolve => setTimeout(resolve, 20000));
+      output = await getOutput(containerId);
+      if (output) break;
+    }
+
+    if (!output) {
+      throw new Error("❌ Timed out waiting for PhantomBuster output.");
+    }
+
+    const filename = `phantom_output_${new Date().toISOString().replace(/:/g, "-")}.json`;
+    fs.writeFileSync(filename, JSON.stringify(output, null, 2));
+    console.log(`💾 Output saved locally as ${filename}`);
+
+    const result = await uploadToS3(filename, filename);
+    console.log(`✅ Uploaded to S3: ${result.Location}`);
   } catch (error) {
-    console.error("❌ Error:", error.message || error);
+    console.error("❌ Error:", error);
     process.exit(1);
   }
 })();
