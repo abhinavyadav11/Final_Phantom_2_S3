@@ -1,17 +1,17 @@
 import boto3
 import requests
 import os
-from dotenv import load_dotenv
+import json
 
-# === Load environment variables from .env ===
-load_dotenv()
+# Parse JSON secret from GitHub Actions
+secrets = json.loads(os.getenv("SECRET"))
 
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_REGION = os.getenv("AWS_REGION")
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+AWS_ACCESS_KEY_ID = secrets["accessKeyId"]
+AWS_SECRET_ACCESS_KEY = secrets["secretAccessKey"]
+AWS_REGION = secrets["region"]
+S3_BUCKET_NAME = secrets["bucket"]
 
-# PhantomBuster file URLs
+# PhantomBuster output URLs
 REMOTE_CSV_URL = 'https://phantombuster.s3.amazonaws.com/eAwTgnQzO48/bIH9f0xJSr9bmjikMzxfFA/result.csv'
 REMOTE_JSON_URL = 'https://phantombuster.s3.amazonaws.com/eAwTgnQzO48/bIH9f0xJSr9bmjikMzxfFA/result.json'
 
@@ -29,11 +29,9 @@ def upload_file_from_url_to_s3(remote_url, s3_bucket, s3_key):
 
         s3_client.upload_fileobj(response.raw, s3_bucket, s3_key)
         print(f"✅ Uploaded {remote_url} to s3://{s3_bucket}/{s3_key}")
-
     except Exception as e:
         print(f"❌ Error uploading {remote_url} to S3: {e}")
 
-# === Example uploads ===
 upload_file_from_url_to_s3(
     remote_url=REMOTE_CSV_URL,
     s3_bucket=S3_BUCKET_NAME,
