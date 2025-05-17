@@ -1,0 +1,13 @@
+{
+  "name": "phantombuster-scraper",
+  "version": "1.0.0",
+  "main": "scrape-and-upload.js",
+  "scripts": {
+    "start": "node scrape-and-upload.js"
+  },
+  "dependencies": {
+    "axios": "^1.0.0",
+    "dotenv": "^16.0.0",
+    "aws-sdk": "^2.0.0"
+  }
+}
