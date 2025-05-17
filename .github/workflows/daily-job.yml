@@ -9,7 +9,7 @@ jobs:
   run-scripts:
     runs-on: ubuntu-latest
     env:
-      ALL_CREDENTIAL: ${{ secrets.ALL_CREDENTIAL }}
+      ALL_CREDENTIAL: ${{ secrets.ALL_CREDENTIALS }}
 
     steps:
       - name: Checkout repo
