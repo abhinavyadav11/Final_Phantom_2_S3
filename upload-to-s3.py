@@ -4,7 +4,7 @@ import os
 import json
 
 # Load credentials from ALL_CREDENTIAL
-credentials = json.loads(os.getenv("ALL_CREDENTIAL"))
+credentials = json.loads(os.getenv("ALL_CREDENTIALS"))
 
 AWS_ACCESS_KEY_ID = credentials["accessKeyId"]
 AWS_SECRET_ACCESS_KEY = credentials["secretAccessKey"]
