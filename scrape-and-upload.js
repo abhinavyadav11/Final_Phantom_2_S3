@@ -2,26 +2,30 @@ const axios = require('axios');
 const fs = require('fs');
 const AWS = require('aws-sdk');
 
-// Parse JSON from the ALL_CREDENTIAL secret
 let credentials;
 try {
   credentials = JSON.parse(process.env.ALL_CREDENTIALS);
-} catch (err) {
-  console.error("❌ Failed to parse ALL_CREDENTIALS:", err);
+} catch (error) {
+  console.error("❌ Failed to parse ALL_CREDENTIALS:", error);
   process.exit(1);
 }
 
-const { apiKey, agentId, accessKeyId, secretAccessKey, region, bucket } = credentials;
+const { apiKey, agentId, accessKeyId, secretAccessKey } = credentials;
+const {
+  AWS_REGION,
+  S3_BUCKET_NAME
+} = process.env;
 
-// Configure AWS SDK
+const awsAccessKeyId = accessKeyId || process.env.AWS_ACCESS_KEY_ID;
+const awsSecretAccessKey = secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY;
+
 AWS.config.update({
-  accessKeyId,
-  secretAccessKey,
-  region
+  accessKeyId: awsAccessKeyId,
+  secretAccessKey: awsSecretAccessKey,
+  region: AWS_REGION
 });
 const s3 = new AWS.S3();
 
-// Constants
 const MAX_FETCH_RETRIES = 30;
 const FETCH_RETRY_DELAY = 20000;
 const MAX_LAUNCH_RETRIES = 5;
@@ -90,11 +94,13 @@ async function run() {
     const resultRes = await fetchOutput(containerId);
     const output = JSON.stringify(resultRes, null, 2);
 
+    console.log("✅ Phantom output received:");
+
     const fileName = `phantom_output_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     fs.writeFileSync(fileName, output);
     console.log(`💾 Output saved locally as ${fileName}`);
 
-    await uploadToS3(fileName, bucket, `phantom_outputs/${fileName}`);
+    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
