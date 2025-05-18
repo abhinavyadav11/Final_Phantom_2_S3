@@ -128,7 +128,8 @@ async function run() {
     console.log(`💾 JSON result URL saved locally as ${urlFileName}`);
 
     // Upload the full output JSON to S3
-    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
+    console.log("S3_BUCKET_NAME from env:", process.env.S3_BUCKET_NAME);
+    await uploadToS3(fileName, process.env.S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
