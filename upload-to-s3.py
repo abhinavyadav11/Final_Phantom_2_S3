@@ -3,7 +3,7 @@ import requests
 import os
 import json
 
-# Load credentials from ALL_CREDENTIAL
+# Load credentials from ALL_CREDENTIALS
 credentials = json.loads(os.getenv("ALL_CREDENTIALS"))
 
 AWS_ACCESS_KEY_ID = credentials["accessKeyId"]
@@ -11,8 +11,8 @@ AWS_SECRET_ACCESS_KEY = credentials["secretAccessKey"]
 AWS_REGION = credentials["region"]
 S3_BUCKET_NAME = credentials["bucket"]
 
-REMOTE_CSV_URL = 'https://phantombuster.s3.amazonaws.com/eAwTgnQzO48/bIH9f0xJSr9bmjikMzxfFA/result.csv'
-REMOTE_JSON_URL = 'https://phantombuster.s3.amazonaws.com/eAwTgnQzO48/bIH9f0xJSr9bmjikMzxfFA/result.json'
+REMOTE_CSV_URL = os.getenv("REMOTE_CSV_URL")
+REMOTE_JSON_URL = os.getenv("REMOTE_JSON_URL")
 
 def upload_file_from_url_to_s3(remote_url, s3_bucket, s3_key):
     try:
