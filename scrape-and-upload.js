@@ -105,8 +105,7 @@ async function run() {
     const output = resultRes.output;
 
     // Truncate log print for clarity
-    const shortLog = typeof output === 'string' ? output.substring(0, 500) : JSON.stringify(output).substring(0, 500);
-    console.log("Full Phantom output (truncated to 500 chars):", shortLog);
+    console.log("Full Phantom output:\n", output);
 
     // Extract JSON URL from logs
     const jsonUrl = extractJsonUrlFromLogs(output);
