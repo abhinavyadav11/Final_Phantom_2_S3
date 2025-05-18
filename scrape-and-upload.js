@@ -1,23 +1,23 @@
+require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
 const AWS = require('aws-sdk');
 
-// Parse secret JSON from environment variable
+// Parse ALL_CREDENTIALS env var once
 const {
   apiKey,
   agentId,
-  sessionCookie, // not used unless needed for auth
-  accessKeyId,
-  secretAccessKey,
-  bucketName,
-  region
-} = JSON.parse(process.env.ALL_CREDENTIALS || '{}');
+  AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY,
+  AWS_REGION,
+  S3_BUCKET_NAME
+} = JSON.parse(process.env.ALL_CREDENTIALS);
 
 // Configure AWS SDK
 AWS.config.update({
-  accessKeyId,
-  secretAccessKey,
-  region
+  accessKeyId: AWS_ACCESS_KEY_ID,
+  secretAccessKey: AWS_SECRET_ACCESS_KEY,
+  region: AWS_REGION
 });
 const s3 = new AWS.S3();
 
@@ -29,17 +29,22 @@ const LAUNCH_RETRY_DELAY = 10000;
 
 async function fetchOutput(containerId, retries = MAX_FETCH_RETRIES, delay = FETCH_RETRY_DELAY) {
   for (let i = 0; i < retries; i++) {
-    const res = await axios.get(
-      `https://api.phantombuster.com/api/v2/containers/fetch-output?id=${containerId}`,
-      { headers: { 'X-Phantombuster-Key-1': apiKey } }
-    );
+    try {
+      const res = await axios.get(
+        `https://api.phantombuster.com/api/v2/containers/fetch-output?id=${containerId}`,
+        { headers: { 'X-Phantombuster-Key-1': apiKey } }
+      );
 
-    if (res.data.output !== null) {
-      return res.data;
+      if (res.data.output !== null) {
+        return res.data;
+      }
+
+      console.log(`⏳ Output empty, retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
+      await new Promise(r => setTimeout(r, delay));
+    } catch (err) {
+      console.error('Error fetching output:', err.message || err);
+      await new Promise(r => setTimeout(r, delay));
     }
-
-    console.log(`⏳ Output empty, retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
-    await new Promise(r => setTimeout(r, delay));
   }
   throw new Error('❌ Output not ready after max retries');
 }
@@ -66,18 +71,18 @@ async function launchAgentWithRetry(retries = MAX_LAUNCH_RETRIES, delay = LAUNCH
   throw new Error('❌ Failed to launch agent after max retries due to rate limiting');
 }
 
-async function uploadToS3(filePath, bucket, key) {
+async function uploadToS3(filePath, bucketName, key) {
   const fileContent = fs.readFileSync(filePath);
 
   const params = {
-    Bucket: bucket,
+    Bucket: bucketName,
     Key: key,
     Body: fileContent,
     ContentType: 'application/json'
   };
 
   await s3.upload(params).promise();
-  console.log(`✅ Uploaded to S3 bucket: ${bucket} as ${key}`);
+  console.log(`✅ Uploaded to S3 bucket: ${bucketName} as ${key}`);
 }
 
 async function run() {
@@ -88,15 +93,34 @@ async function run() {
     console.log(`🟢 Launched agent, container ID: ${containerId}`);
 
     const resultRes = await fetchOutput(containerId);
+
+    // Extract the URL of the JSON result file
+    let jsonUrl = null;
+    if (Array.isArray(resultRes.output)) {
+      jsonUrl = resultRes.output.find(url => url.endsWith('.json'));
+    } else if (typeof resultRes.output === 'string' && resultRes.output.endsWith('.json')) {
+      jsonUrl = resultRes.output;
+    }
+
+    if (!jsonUrl) {
+      throw new Error('❌ Could not find JSON result URL in Phantom output');
+    }
+
+    console.log("✅ Phantom JSON result URL:", jsonUrl);
+
+    // Save the full API response locally
     const output = JSON.stringify(resultRes, null, 2);
-
-    console.log("✅ Phantom output received:");
-
     const fileName = `phantom_output_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
     fs.writeFileSync(fileName, output);
     console.log(`💾 Output saved locally as ${fileName}`);
 
-    await uploadToS3(fileName, bucketName, `phantom_outputs/${fileName}`);
+    // Save JSON URL to a separate file
+    const urlFileName = 'phantom_result_url.txt';
+    fs.writeFileSync(urlFileName, jsonUrl);
+    console.log(`💾 JSON result URL saved locally as ${urlFileName}`);
+
+    // Upload the full output JSON to S3
+    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
