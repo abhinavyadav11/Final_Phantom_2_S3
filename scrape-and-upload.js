@@ -35,7 +35,9 @@ async function fetchOutput(containerId, retries = MAX_FETCH_RETRIES, delay = FET
         { headers: { 'X-Phantombuster-Key-1': apiKey } }
       );
 
-      if (res.data.output !== null && res.data.output.length > 0) {
+      const output = res.data.output;
+
+      if (output !== null) {
         return res.data;
       }
 
@@ -85,23 +87,10 @@ async function uploadToS3(filePath, bucketName, key) {
   console.log(`✅ Uploaded to S3 bucket: ${bucketName} as ${key}`);
 }
 
-function extractUrlsFromOutput(outputString) {
-  // Regex to find .json and .csv URLs in output logs
-  const urlRegex = /(https:\/\/phantombuster\.s3\.amazonaws\.com\/[^\s"]+?\.(json|csv))/g;
-
-  const matches = [...outputString.matchAll(urlRegex)];
-  const urls = { jsonUrl: null, csvUrl: null };
-
-  for (const match of matches) {
-    const url = match[1];
-    if (url.endsWith('.json') && !urls.jsonUrl) {
-      urls.jsonUrl = url;
-    } else if (url.endsWith('.csv') && !urls.csvUrl) {
-      urls.csvUrl = url;
-    }
-  }
-
-  return urls;
+function extractJsonUrlFromLogs(logText) {
+  const jsonUrlRegex = /https:\/\/[^\s]+\.json/g;
+  const matches = logText.match(jsonUrlRegex);
+  return matches ? matches[0] : null;
 }
 
 async function run() {
@@ -113,36 +102,34 @@ async function run() {
 
     const resultRes = await fetchOutput(containerId);
 
-    // The output is a big string with logs
-    const outputStr = resultRes.output;
+    const output = resultRes.output;
 
-    console.log("Full Phantom output (truncated to 500 chars):", outputStr.substring(0, 500));
+    // Truncate log print for clarity
+    const shortLog = typeof output === 'string' ? output.substring(0, 500) : JSON.stringify(output).substring(0, 500);
+    console.log("Full Phantom output (truncated to 500 chars):", shortLog);
 
-    const { jsonUrl, csvUrl } = extractUrlsFromOutput(outputStr);
-
+    // Extract JSON URL from logs
+    const jsonUrl = extractJsonUrlFromLogs(output);
     if (!jsonUrl) {
       console.error("❌ Phantom output does not contain a JSON result URL.");
       process.exit(1);
     }
 
     console.log("✅ Phantom JSON result URL:", jsonUrl);
-    if (csvUrl) console.log("✅ Phantom CSV result URL:", csvUrl);
 
-    // Save full API response locally
-    const fileName = `phantom_output_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    // Save full output logs locally
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `phantom_output_${timestamp}.json`;
     fs.writeFileSync(fileName, JSON.stringify(resultRes, null, 2));
     console.log(`💾 Output saved locally as ${fileName}`);
 
-    // Save JSON URL to separate file
+    // Save JSON URL to a separate file
     const urlFileName = 'phantom_result_url.txt';
     fs.writeFileSync(urlFileName, jsonUrl);
     console.log(`💾 JSON result URL saved locally as ${urlFileName}`);
 
-    // Upload full output JSON to S3
+    // Upload the full output JSON to S3
     await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
-
-    // Optional: Download and upload the JSON result file from PhantomBuster S3 to your bucket
-    // You can implement if needed, just ask!
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
