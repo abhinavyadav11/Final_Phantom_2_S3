@@ -1,30 +1,28 @@
-name: Daily PhantomBuster Scraper and S3 Upload
+name: Run PhantomBuster and Upload to S3
 
 on:
-  schedule:
-    - cron: "0 3 * * *"  # Every day at 3:00 AM UTC
   workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *"  # Runs every day at 12 PM UTC
 
 jobs:
-  scrape-and-upload:
+  run-scraper:
     runs-on: ubuntu-latest
+
+    env:
+      ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: "18"
 
       - name: Install dependencies
         run: npm install
 
-      - name: Run PhantomBuster scrape script
-        env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-          S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Run scrape and upload
         run: node scrape-and-upload.js
