@@ -29,12 +29,14 @@ jobs:
       - name: Run PhantomBuster agent (Node.js)
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
         run: |
           node scrape-and-upload.js
 
       - name: Upload Phantom output JSON to S3 using Python script
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
         run: |
           LATEST_JSON=$(ls -1t phantom_output_*.json | head -n 1)
           echo "Uploading $LATEST_JSON to S3"
@@ -43,6 +45,7 @@ jobs:
       - name: Upload Phantom JSON result URL file to S3
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
         run: |
           if [ -f phantom_result_url.txt ]; then
             echo "Uploading phantom_result_url.txt to S3"
