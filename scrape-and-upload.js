@@ -94,23 +94,38 @@ async function run() {
 
     const resultRes = await fetchOutput(containerId);
 
-    // Extract the URL of the JSON result file
+    // DEBUG: log full Phantom output to understand structure
+    console.log("Full Phantom output:", JSON.stringify(resultRes.output, null, 2));
+
+    // Extract the URL of the JSON result file (flexible handling)
     let jsonUrl = null;
+
     if (Array.isArray(resultRes.output)) {
-      jsonUrl = resultRes.output.find(url => url.endsWith('.json'));
+      jsonUrl = resultRes.output.find(url => typeof url === 'string' && url.endsWith('.json'));
+      if (!jsonUrl) {
+        for (const item of resultRes.output) {
+          if (item && typeof item.url === 'string' && item.url.endsWith('.json')) {
+            jsonUrl = item.url;
+            break;
+          }
+        }
+      }
     } else if (typeof resultRes.output === 'string' && resultRes.output.endsWith('.json')) {
       jsonUrl = resultRes.output;
+    } else if (resultRes.output && typeof resultRes.output.url === 'string' && resultRes.output.url.endsWith('.json')) {
+      jsonUrl = resultRes.output.url;
     }
 
     if (!jsonUrl) {
-      throw new Error('❌ Could not find JSON result URL in Phantom output');
+      console.error("❌ Phantom output does not contain a JSON result URL.");
+      process.exit(1);
     }
 
     console.log("✅ Phantom JSON result URL:", jsonUrl);
 
     // Save the full API response locally
-    const output = JSON.stringify(resultRes, null, 2);
     const fileName = `phantom_output_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+    const output = JSON.stringify(resultRes, null, 2);
     fs.writeFileSync(fileName, output);
     console.log(`💾 Output saved locally as ${fileName}`);
 
