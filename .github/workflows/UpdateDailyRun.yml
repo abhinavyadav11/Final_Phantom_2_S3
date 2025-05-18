@@ -1,4 +1,4 @@
-name: PhantomBuster Run and Upload
+name: 2 PhantomBuster Run and Upload
 
 on:
   workflow_dispatch:   # manual trigger
@@ -30,16 +30,13 @@ jobs:
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
         run: |
-          node your-node-script.js
-
-      # Assuming your Node.js script writes local files like:
-      # phantom_output_<timestamp>.json and phantom_result_url.txt
+          node phantom-launch-upload.js
 
       - name: Upload Phantom output JSON to S3 using Python script
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
         run: |
-          # Find the latest phantom output file
+          # Find the latest phantom output JSON file
           LATEST_JSON=$(ls -1t phantom_output_*.json | head -n 1)
           echo "Uploading $LATEST_JSON to S3"
           python upload-to-s3.py "$LATEST_JSON" "phantom_outputs/$(basename $LATEST_JSON)"
@@ -49,8 +46,7 @@ jobs:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
         run: |
           if [ -f phantom_result_url.txt ]; then
-            URL=$(cat phantom_result_url.txt)
-            echo "Uploading phantom_result_url.txt containing URL $URL to S3"
+            echo "Uploading phantom_result_url.txt to S3"
             python upload-to-s3.py phantom_result_url.txt "phantom_outputs/phantom_result_url.txt"
           else
             echo "phantom_result_url.txt not found, skipping"
