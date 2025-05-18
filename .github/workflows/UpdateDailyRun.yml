@@ -1,0 +1,57 @@
+name: PhantomBuster Run and Upload
+
+on:
+  workflow_dispatch:   # manual trigger
+  schedule:
+    - cron: '0 6 * * *'  # every day at 6:00 UTC (adjust as needed)
+
+jobs:
+  run-phantombuster:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Node dependencies
+        run: npm install
+
+      - name: Run PhantomBuster agent (Node.js)
+        env:
+          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+        run: |
+          node your-node-script.js
+
+      # Assuming your Node.js script writes local files like:
+      # phantom_output_<timestamp>.json and phantom_result_url.txt
+
+      - name: Upload Phantom output JSON to S3 using Python script
+        env:
+          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+        run: |
+          # Find the latest phantom output file
+          LATEST_JSON=$(ls -1t phantom_output_*.json | head -n 1)
+          echo "Uploading $LATEST_JSON to S3"
+          python upload-to-s3.py "$LATEST_JSON" "phantom_outputs/$(basename $LATEST_JSON)"
+
+      - name: Upload Phantom JSON result URL file to S3
+        env:
+          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+        run: |
+          if [ -f phantom_result_url.txt ]; then
+            URL=$(cat phantom_result_url.txt)
+            echo "Uploading phantom_result_url.txt containing URL $URL to S3"
+            python upload-to-s3.py phantom_result_url.txt "phantom_outputs/phantom_result_url.txt"
+          else
+            echo "phantom_result_url.txt not found, skipping"
+          fi
