@@ -1,45 +1,56 @@
-import boto3
-import requests
 import os
+import sys
 import json
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
-# Load credentials from ALL_CREDENTIALS
-credentials = json.loads(os.getenv("ALL_CREDENTIALS"))
-
-AWS_ACCESS_KEY_ID = credentials["accessKeyId"]
-AWS_SECRET_ACCESS_KEY = credentials["secretAccessKey"]
-AWS_REGION = credentials["region"]
-S3_BUCKET_NAME = credentials["bucket"]
-
-REMOTE_CSV_URL = os.getenv("REMOTE_CSV_URL")
-REMOTE_JSON_URL = os.getenv("REMOTE_JSON_URL")
-
-def upload_file_from_url_to_s3(remote_url, s3_bucket, s3_key):
+def upload_to_s3(file_path, bucket_name, s3_key, aws_access_key_id, aws_secret_access_key, aws_region):
+    s3_client = boto3.client(
+        's3',
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        region_name=aws_region
+    )
     try:
-        response = requests.get(remote_url, stream=True)
-        response.raise_for_status()
-
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=AWS_ACCESS_KEY_ID,
-            aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-            region_name=AWS_REGION
+        s3_client.upload_file(
+            Filename=file_path,
+            Bucket=bucket_name,
+            Key=s3_key,
+            ExtraArgs={'ContentType': 'application/json'}
         )
+        print(f"✅ Uploaded {file_path} to s3://{bucket_name}/{s3_key}")
+    except (BotoCoreError, ClientError) as e:
+        print(f"❌ Failed to upload file: {e}")
+        sys.exit(1)
 
-        s3_client.upload_fileobj(response.raw, s3_bucket, s3_key)
-        print(f"✅ Uploaded {remote_url} to s3://{s3_bucket}/{s3_key}")
+if __name__ == "__main__":
+    # Check command-line args
+    if len(sys.argv) != 3:
+        print("Usage: python upload-to-s3.py <local_file_path> <s3_key>")
+        sys.exit(1)
 
-    except Exception as e:
-        print(f"❌ Error uploading {remote_url} to S3: {e}")
+    local_file = sys.argv[1]
+    s3_key = sys.argv[2]
 
-upload_file_from_url_to_s3(
-    remote_url=REMOTE_CSV_URL,
-    s3_bucket=S3_BUCKET_NAME,
-    s3_key='phantombuster/data/result.csv'
-)
+    # Read ALL_CREDENTIALS env var and parse JSON
+    all_creds_json = os.getenv('ALL_CREDENTIALS')
+    if not all_creds_json:
+        print("❌ Environment variable ALL_CREDENTIALS is not set.")
+        sys.exit(1)
 
-upload_file_from_url_to_s3(
-    remote_url=REMOTE_JSON_URL,
-    s3_bucket=S3_BUCKET_NAME,
-    s3_key='phantombuster/data/result.json'
-)
+    try:
+        creds = json.loads(all_creds_json)
+    except json.JSONDecodeError as e:
+        print(f"❌ Failed to parse ALL_CREDENTIALS JSON: {e}")
+        sys.exit(1)
+
+    aws_access_key_id = creds.get('AWS_ACCESS_KEY_ID')
+    aws_secret_access_key = creds.get('AWS_SECRET_ACCESS_KEY')
+    aws_region = creds.get('AWS_REGION')
+    bucket_name = creds.get('S3_BUCKET_NAME')
+
+    if not all([aws_access_key_id, aws_secret_access_key, aws_region, bucket_name]):
+        print("❌ Missing AWS credentials or bucket name in ALL_CREDENTIALS.")
+        sys.exit(1)
+
+    upload_to_s3(local_file, bucket_name, s3_key, aws_access_key_id, aws_secret_access_key, aws_region)
