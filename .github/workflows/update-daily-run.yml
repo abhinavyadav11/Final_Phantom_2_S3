@@ -56,4 +56,4 @@ jobs:
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           CSV_URL: ${{ env.CSV_URL }}
           JSON_URL: ${{ env.JSON_URL }}
-        run: python upload_from_urls.py
+        run: upload-to-s3.py
