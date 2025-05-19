@@ -1,60 +1,62 @@
-name: PhantomBuster Run and Upload
+name: Scrape and Upload
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 6 * * *'  # Runs every day at 6:00 AM UTC
+    - cron: '0 0 * * *'  # Daily at midnight UTC, adjust as needed
 
 jobs:
-  run-phantombuster:
+  scrape-upload:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
+          node-version: 18
+
+      - name: Install Node.js dependencies
+        run: npm install
+        working-directory: ./your-nodejs-folder # adjust if needed
+
+      - name: Run scraper and upload Phantom output
+        id: run-scraper
+        env:
+          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+        run: |
+          node ./your-nodejs-folder/scrape-and-upload.js > output.json
+          # The last line of output.json contains the JSON with csvUrl and jsonUrl
+          tail -n 1 output.json > urls.json
+        shell: bash
+
+      - name: Parse URLs from scraper output
+        id: parse-urls
+        run: |
+          CSV_URL=$(jq -r '.csvUrl' urls.json)
+          JSON_URL=$(jq -r '.jsonUrl' urls.json)
+          echo "CSV_URL=$CSV_URL" >> $GITHUB_ENV
+          echo "JSON_URL=$JSON_URL" >> $GITHUB_ENV
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-
-      - name: Install Node dependencies
-        run: npm install
-
-      - name: Run PhantomBuster agent (Node.js)
-        id: phantom
-        env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-        run: |
-          # Run your Node.js script, output URLs in JSON format for easy parsing
-          node scrape-and-upload.js > phantom_output.json
-          # Extract URLs from the JSON output
-          CSV_URL=$(jq -r '.csvUrl' phantom_output.json)
-          JSON_URL=$(jq -r '.jsonUrl' phantom_output.json)
-
-          echo "CSV_URL=$CSV_URL"
-          echo "JSON_URL=$JSON_URL"
-
-          # Set GitHub Action outputs
-          echo "::set-output name=csv_url::$CSV_URL"
-          echo "::set-output name=json_url::$JSON_URL"
+          python-version: 3.10
 
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install requests boto3
+          pip install boto3 requests python-dotenv
 
-      - name: Upload Phantom output CSV and JSON to S3 using Python script
+      - name: Run Python uploader script
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          REMOTE_CSV_URL: ${{ steps.phantom.outputs.csv_url }}
-          REMOTE_JSON_URL: ${{ steps.phantom.outputs.json_url }}
-        run: python upload-to-s3.py
+          CSV_URL: ${{ env.CSV_URL }}
+          JSON_URL: ${{ env.JSON_URL }}
+        run: |
+          python ./your-python-folder/upload_from_urls.py
