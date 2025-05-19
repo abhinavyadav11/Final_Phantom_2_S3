@@ -27,6 +27,7 @@ const FETCH_RETRY_DELAY = 20000;
 const MAX_LAUNCH_RETRIES = 5;
 const LAUNCH_RETRY_DELAY = 10000;
 
+// Fetch PhantomBuster output (waits with retries)
 async function fetchOutput(containerId, retries = MAX_FETCH_RETRIES, delay = FETCH_RETRY_DELAY) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -44,13 +45,14 @@ async function fetchOutput(containerId, retries = MAX_FETCH_RETRIES, delay = FET
       console.log(`⏳ Output empty, retrying in ${delay / 1000}s... (${i + 1}/${retries})`);
       await new Promise(r => setTimeout(r, delay));
     } catch (err) {
-      console.error('Error fetching output:', err.message || err);
+      console.error('⚠️ Error fetching output:', err.message || err);
       await new Promise(r => setTimeout(r, delay));
     }
   }
   throw new Error('❌ Output not ready after max retries');
 }
 
+// Launch PhantomBuster agent
 async function launchAgentWithRetry(retries = MAX_LAUNCH_RETRIES, delay = LAUNCH_RETRY_DELAY) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -66,13 +68,14 @@ async function launchAgentWithRetry(retries = MAX_LAUNCH_RETRIES, delay = LAUNCH
         await new Promise(res => setTimeout(res, delay));
         delay *= 2;
       } else {
-        throw err;
+        throw new Error(`❌ Failed to launch agent: ${err.message}`);
       }
     }
   }
-  throw new Error('❌ Failed to launch agent after max retries due to rate limiting');
+  throw new Error('❌ Failed to launch agent after max retries');
 }
 
+// Upload a file to S3
 async function uploadToS3(filePath, bucketName, key) {
   const fileContent = fs.readFileSync(filePath);
 
@@ -87,12 +90,14 @@ async function uploadToS3(filePath, bucketName, key) {
   console.log(`✅ Uploaded to S3 bucket: ${bucketName} as ${key}`);
 }
 
+// Extract the result JSON URL from Phantom output logs
 function extractJsonUrlFromLogs(logText) {
   const jsonUrlRegex = /https:\/\/[^\s]+\.json/g;
   const matches = logText.match(jsonUrlRegex);
   return matches ? matches[0] : null;
 }
 
+// Main function
 async function run() {
   try {
     console.log(`🚀 Launching PhantomBuster agent with ID: ${agentId}`);
@@ -101,13 +106,12 @@ async function run() {
     console.log(`🟢 Launched agent, container ID: ${containerId}`);
 
     const resultRes = await fetchOutput(containerId);
-
     const output = resultRes.output;
 
-    // Truncate log print for clarity
-    console.log("Full Phantom output:\n", output);
+    // Print full output
+    console.log("📄 Full Phantom output:\n", output);
 
-    // Extract JSON URL from logs
+    // Extract JSON result URL from logs
     const jsonUrl = extractJsonUrlFromLogs(output);
     if (!jsonUrl) {
       console.error("❌ Phantom output does not contain a JSON result URL.");
@@ -116,20 +120,19 @@ async function run() {
 
     console.log("✅ Phantom JSON result URL:", jsonUrl);
 
-    // Save full output logs locally
+    // Save full Phantom output locally
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `phantom_output_${timestamp}.json`;
     fs.writeFileSync(fileName, JSON.stringify(resultRes, null, 2));
     console.log(`💾 Output saved locally as ${fileName}`);
 
-    // Save JSON URL to a separate file
+    // Save the extracted result URL in a separate file
     const urlFileName = 'phantom_result_url.txt';
     fs.writeFileSync(urlFileName, jsonUrl);
     console.log(`💾 JSON result URL saved locally as ${urlFileName}`);
 
-    // Upload the full output JSON to S3
-    console.log("S3_BUCKET_NAME from env:", process.env.S3_BUCKET_NAME);
-    await uploadToS3(fileName, process.env.S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
+    // Upload full output file to S3
+    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
