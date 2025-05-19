@@ -90,10 +90,17 @@ async function uploadToS3(filePath, bucketName, key) {
   console.log(`✅ Uploaded to S3 bucket: ${bucketName} as ${key}`);
 }
 
-// Extract the result JSON URL from Phantom output logs
+// Extract JSON URL from logs
 function extractJsonUrlFromLogs(logText) {
   const jsonUrlRegex = /https:\/\/[^\s]+\.json/g;
   const matches = logText.match(jsonUrlRegex);
+  return matches ? matches[0] : null;
+}
+
+// Extract CSV URL from logs
+function extractCsvUrlFromLogs(logText) {
+  const csvUrlRegex = /https:\/\/[^\s]+\.csv/g;
+  const matches = logText.match(csvUrlRegex);
   return matches ? matches[0] : null;
 }
 
@@ -111,14 +118,17 @@ async function run() {
     // Print full output
     console.log("📄 Full Phantom output:\n", output);
 
-    // Extract JSON result URL from logs
+    // Extract CSV and JSON URLs from output logs
+    const csvUrl = extractCsvUrlFromLogs(output);
     const jsonUrl = extractJsonUrlFromLogs(output);
-    if (!jsonUrl) {
-      console.error("❌ Phantom output does not contain a JSON result URL.");
+
+    if (!csvUrl || !jsonUrl) {
+      console.error("❌ Phantom output missing CSV or JSON URLs.");
       process.exit(1);
     }
 
-    console.log("✅ Phantom JSON result URL:", jsonUrl);
+    console.log("✅ Phantom CSV URL:", csvUrl);
+    console.log("✅ Phantom JSON URL:", jsonUrl);
 
     // Save full Phantom output locally
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -126,13 +136,11 @@ async function run() {
     fs.writeFileSync(fileName, JSON.stringify(resultRes, null, 2));
     console.log(`💾 Output saved locally as ${fileName}`);
 
-    // Save the extracted result URL in a separate file
-    const urlFileName = 'phantom_result_url.txt';
-    fs.writeFileSync(urlFileName, jsonUrl);
-    console.log(`💾 JSON result URL saved locally as ${urlFileName}`);
-
     // Upload full output file to S3
     await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
+
+    // Output the URLs as a JSON object to stdout for downstream steps
+    console.log(JSON.stringify({ csvUrl, jsonUrl }));
 
   } catch (err) {
     console.error("❌ Error:", err.message || err);
