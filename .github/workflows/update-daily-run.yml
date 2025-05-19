@@ -29,9 +29,18 @@ jobs:
       - name: Run PhantomBuster agent (Node.js)
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
         run: |
           node scrape-and-upload.js
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Create credentials.py from ALL_CREDENTIALS
+        env:
+          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+        run: |
+          echo "ALL_CREDENTIALS = " > credentials.py
+          echo "$ALL_CREDENTIALS" | jq '.' >> credentials.py
 
       - name: Install Python dependencies
         run: |
@@ -39,22 +48,4 @@ jobs:
           pip install requests boto3
 
       - name: Upload Phantom output CSV to S3 using Python script
-        env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
-        run: |
-          LATEST_JSON=$(ls -1t phantom_output_*.json | head -n 1)
-          echo "Uploading $LATEST_JSON to S3"
-          python upload-to-s3.py "$LATEST_JSON" "phantom_outputs/$(basename $LATEST_JSON)"
-
-      - name: Upload Phantom JSON result URL file to S3
-        env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
-        run: |
-          if [ -f phantom_result_url.txt ]; then
-            echo "Uploading phantom_result_url.txt to S3"
-            python upload-to-s3.py phantom_result_url.txt "phantom_outputs/phantom_result_url.txt"
-          else
-            echo "phantom_result_url.txt not found, skipping"
-          fi
+        run: python upload-to-s3.py
