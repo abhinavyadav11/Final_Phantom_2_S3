@@ -1,56 +1,45 @@
-import os
-import sys
 import json
+import glob
+import re
+import requests
 import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+import os
+from datetime import datetime
 
-def upload_to_s3(file_path, bucket_name, s3_key, aws_access_key_id, aws_secret_access_key, aws_region):
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        region_name=aws_region
-    )
-    try:
-        s3_client.upload_file(
-            Filename=file_path,
-            Bucket=bucket_name,
-            Key=s3_key,
-            ExtraArgs={'ContentType': 'application/json'}
-        )
-        print(f"✅ Uploaded {file_path} to s3://{bucket_name}/{s3_key}")
-    except (BotoCoreError, ClientError) as e:
-        print(f"❌ Failed to upload file: {e}")
-        sys.exit(1)
+# Step 1: Find latest phantom_output_*.json
+json_files = sorted(glob.glob("phantom_output_*.json"), key=os.path.getmtime)
+if not json_files:
+    raise FileNotFoundError("❌ No PhantomBuster output JSON file found.")
+latest_json_file = json_files[-1]
+print(f"📄 Latest JSON file found: {latest_json_file}")
 
-if __name__ == "__main__":
-    # Check command-line args
-    if len(sys.argv) != 3:
-        print("Usage: python upload-to-s3.py <local_file_path> <s3_key>")
-        sys.exit(1)
+# Step 2: Load JSON content
+with open(latest_json_file, "r") as f:
+    data = json.load(f)
 
-    local_file = sys.argv[1]
-    s3_key = sys.argv[2]
+# Step 3: Extract CSV URL using regex
+output_str = data.get("output", "")
+csv_match = re.search(r"https://phantombuster\.s3\.amazonaws\.com/[^\s\"']+\.csv", output_str)
 
-    # Read ALL_CREDENTIALS env var and parse JSON
-    all_creds_json = os.getenv('ALL_CREDENTIALS')
-    if not all_creds_json:
-        print("❌ Environment variable ALL_CREDENTIALS is not set.")
-        sys.exit(1)
+if not csv_match:
+    raise ValueError("❌ CSV URL not found in PhantomBuster JSON output.")
+CSV_URL = csv_match.group()
+print(f"✅ Extracted CSV URL: {CSV_URL}")
 
-    try:
-        creds = json.loads(all_creds_json)
-    except json.JSONDecodeError as e:
-        print(f"❌ Failed to parse ALL_CREDENTIALS JSON: {e}")
-        sys.exit(1)
+# Step 4: Download CSV
+csv_filename = f"phantom_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+response = requests.get(CSV_URL)
+if response.status_code != 200:
+    raise Exception(f"❌ Failed to download CSV. Status code: {response.status_code}")
+with open(csv_filename, "wb") as f:
+    f.write(response.content)
+print(f"📥 Downloaded CSV file: {csv_filename}")
 
-    aws_access_key_id = creds.get('AWS_ACCESS_KEY_ID')
-    aws_secret_access_key = creds.get('AWS_SECRET_ACCESS_KEY')
-    aws_region = creds.get('AWS_REGION')
-    bucket_name = creds.get('S3_BUCKET_NAME')
+# Step 5: Upload to S3
+# Replace these with your actual S3 bucket name and path
+bucket_name = "phantombusterdata"
+s3_key = f"phantom_outputs/{csv_filename}"
 
-    if not all([aws_access_key_id, aws_secret_access_key, aws_region, bucket_name]):
-        print("❌ Missing AWS credentials or bucket name in ALL_CREDENTIALS.")
-        sys.exit(1)
-
-    upload_to_s3(local_file, bucket_name, s3_key, aws_access_key_id, aws_secret_access_key, aws_region)
+s3 = boto3.client('s3')
+s3.upload_file(csv_filename, bucket_name, s3_key)
+print(f"✅ Uploaded to S3: s3://{bucket_name}/{s3_key}")
