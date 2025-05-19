@@ -20,7 +20,7 @@ jobs:
 
       - name: Install Node.js dependencies
         run: npm install
-        working-directory: ./your-nodejs-folder # adjust if needed
+      
 
       - name: Run scraper and upload Phantom output
         id: run-scraper
