@@ -1,14 +1,14 @@
 name: Scrape and Upload
 
+# Trigger manually or daily at midnight UTC
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'  # Daily at midnight UTC, adjust as needed
+    - cron: '0 0 * * *'
 
 jobs:
   scrape-upload:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -20,15 +20,13 @@ jobs:
 
       - name: Install Node.js dependencies
         run: npm install
-      
 
-      - name: Run scraper and upload Phantom output
+      - name: Run scraper and capture URLs
         id: run-scraper
         env:
           ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
         run: |
-          node ./your-nodejs-folder/scrape-and-upload.js > output.json
-          # The last line of output.json contains the JSON with csvUrl and jsonUrl
+          node scrape-and-upload.js > output.json
           tail -n 1 output.json > urls.json
         shell: bash
 
@@ -50,7 +48,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install boto3 requests python-dotenv
 
-      - name: Run Python uploader script
+      - name: Run Python upload script
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -58,5 +56,4 @@ jobs:
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
           CSV_URL: ${{ env.CSV_URL }}
           JSON_URL: ${{ env.JSON_URL }}
-        run: |
-          python ./your-python-folder/upload_from_urls.py
+        run: python upload_from_urls.py
