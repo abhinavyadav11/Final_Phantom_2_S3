@@ -1,4 +1,4 @@
-name: PhantomBuster Run and Upload
+name: 2 PhantomBuster Run and Upload
 
 on:
   workflow_dispatch:
@@ -33,23 +33,11 @@ jobs:
         run: |
           node scrape-and-upload.js
 
-      - name: Upload Phantom output JSON to S3 using Python script
+      - name: Upload Phantom output CSV to S3 using Python script
         env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: "us-east-1"   # change if your bucket region differs
+          # Bucket name is hardcoded in your script, or you can also pass it here if you modify your script
         run: |
-          LATEST_JSON=$(ls -1t phantom_output_*.json | head -n 1)
-          echo "Uploading $LATEST_JSON to S3"
-          python upload-to-s3.py "$LATEST_JSON" "phantom_outputs/$(basename $LATEST_JSON)"
-
-      - name: Upload Phantom JSON result URL file to S3
-        env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
-          S3_BUCKET_NAME: ${{ fromJson(secrets.ALL_CREDENTIALS).S3_BUCKET_NAME }}
-        run: |
-          if [ -f phantom_result_url.txt ]; then
-            echo "Uploading phantom_result_url.txt to S3"
-            python upload-to-s3.py phantom_result_url.txt "phantom_outputs/phantom_result_url.txt"
-          else
-            echo "phantom_result_url.txt not found, skipping"
-          fi
+          python upload-to-s3.py
