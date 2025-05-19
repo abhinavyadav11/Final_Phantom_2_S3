@@ -1,45 +1,56 @@
-import json
-import glob
-import re
 import requests
 import boto3
+import datetime
 import os
-from datetime import datetime
+from credentials import ALL_CREDENTIALS
 
-# Step 1: Find latest phantom_output_*.json
-json_files = sorted(glob.glob("phantom_output_*.json"), key=os.path.getmtime)
-if not json_files:
-    raise FileNotFoundError("❌ No PhantomBuster output JSON file found.")
-latest_json_file = json_files[-1]
-print(f"📄 Latest JSON file found: {latest_json_file}")
+# 1. Prepare filename with current timestamp
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+csv_filename = f"phantom_result_{timestamp}.csv"
 
-# Step 2: Load JSON content
-with open(latest_json_file, "r") as f:
-    data = json.load(f)
+# 2. Launch PhantomBuster agent
+phantom_launch_url = f"https://api.phantombuster.com/api/v2/agents/launch"
+headers = {
+    "X-Phantombuster-Key-1": ALL_CREDENTIALS["apiKey"],
+    "Content-Type": "application/json"
+}
+launch_response = requests.post(phantom_launch_url, json={"id": ALL_CREDENTIALS["agentId"]}, headers=headers)
+launch_response.raise_for_status()
+print("🚀 Launched PhantomBuster agent.")
 
-# Step 3: Extract CSV URL using regex
-output_str = data.get("output", "")
-csv_match = re.search(r"https://phantombuster\.s3\.amazonaws\.com/[^\s\"']+\.csv", output_str)
+# 3. Wait for agent to complete and get output object
+# Note: You can add retry logic here if needed
+agent_status_url = f"https://api.phantombuster.com/api/v2/agents/fetch-output?id={ALL_CREDENTIALS['agentId']}"
+output_response = requests.get(agent_status_url, headers=headers)
+output_response.raise_for_status()
+output_data = output_response.json()
 
-if not csv_match:
-    raise ValueError("❌ CSV URL not found in PhantomBuster JSON output.")
-CSV_URL = csv_match.group()
-print(f"✅ Extracted CSV URL: {CSV_URL}")
+# 4. Get download URL and fetch CSV
+download_url = output_data.get("data", {}).get("container", {}).get("csvUrl")
+if not download_url:
+    raise Exception("❌ Failed to get download URL for CSV.")
 
-# Step 4: Download CSV
-csv_filename = f"phantom_result_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-response = requests.get(CSV_URL)
-if response.status_code != 200:
-    raise Exception(f"❌ Failed to download CSV. Status code: {response.status_code}")
+csv_response = requests.get(download_url)
+csv_response.raise_for_status()
+
 with open(csv_filename, "wb") as f:
-    f.write(response.content)
+    f.write(csv_response.content)
+
 print(f"📥 Downloaded CSV file: {csv_filename}")
 
-# Step 5: Upload to S3
-# Replace these with your actual S3 bucket name and path
-bucket_name = "phantombusterdata"
-s3_key = f"phantom_outputs/{csv_filename}"
+# 5. Upload to AWS S3
+s3 = boto3.client(
+    's3',
+    aws_access_key_id=ALL_CREDENTIALS['AWS_ACCESS_KEY_ID'],
+    aws_secret_access_key=ALL_CREDENTIALS['AWS_SECRET_ACCESS_KEY'],
+    region_name=ALL_CREDENTIALS['AWS_REGION']
+)
 
-s3 = boto3.client('s3')
+bucket_name = ALL_CREDENTIALS["S3_BUCKET_NAME"]
+s3_key = csv_filename
+
 s3.upload_file(csv_filename, bucket_name, s3_key)
 print(f"✅ Uploaded to S3: s3://{bucket_name}/{s3_key}")
+
+# 6. Cleanup (optional)
+os.remove(csv_filename)
