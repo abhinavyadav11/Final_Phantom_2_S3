@@ -7,6 +7,10 @@ AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_REGION = os.getenv("AWS_REGION")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
 
+print("Access Key:", os.getenv("AWS_ACCESS_KEY_ID"))
+print("Region:", os.getenv("AWS_REGION"))
+print("Bucket Name:", os.getenv("S3_BUCKET_NAME"))
+
 CSV_URL = os.getenv("CSV_URL")
 JSON_URL = os.getenv("JSON_URL")
 
