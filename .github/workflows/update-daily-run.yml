@@ -38,6 +38,11 @@ jobs:
           echo "CSV_URL=$CSV_URL" >> $GITHUB_ENV
           echo "JSON_URL=$JSON_URL" >> $GITHUB_ENV
 
+      - name: Debug env vars
+        run: |
+          echo "CSV_URL=$CSV_URL"
+          echo "JSON_URL=$JSON_URL"
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -54,6 +59,4 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
           S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
-          CSV_URL: ${{ env.CSV_URL }}
-          JSON_URL: ${{ env.JSON_URL }}
         run: python upload-to-s3.py
