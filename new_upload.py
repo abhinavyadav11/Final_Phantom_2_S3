@@ -2,6 +2,8 @@ import boto3
 import requests
 import os
 import datetime
+import pandas
+import ByteIO
 
 # Fetch AWS environment variables
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
@@ -32,7 +34,7 @@ def upload_csv_with_source_to_s3(remote_url, s3_bucket, s3_key, source_name):
         response.raise_for_status()
 
         # Read into pandas and add source column
-        df = pd.read_csv(BytesIO(response.content))
+        df = pandas.read_csv(BytesIO(response.content))
         df['source'] = source_name  # Add the source column
 
         # Convert back to CSV
