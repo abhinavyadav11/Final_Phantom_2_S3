@@ -16,16 +16,13 @@ print("Access Key:", AWS_ACCESS_KEY_ID)
 print("Region:", AWS_REGION)
 print("Bucket Name:", S3_BUCKET_NAME)
 
-# Fetch file URLs from environment
+# Fetch CSV URL from environment
 CSV_URL = os.getenv("CSV_URL")
-JSON_URL = os.getenv("JSON_URL")
 
 # Generate timestamp for versioning
 timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
 csv_s3_key_versioned = f'phantombuster/data/result_{timestamp}.csv'
-json_s3_key_versioned = f'phantombuster/data/result_{timestamp}.json'
 csv_s3_key_latest = 'phantombuster/data/latest.csv'
-json_s3_key_latest = 'phantombuster/data/latest.json'
 
 def upload_csv_with_source_to_s3(remote_url, s3_bucket, s3_key, source_name):
     try:
@@ -56,10 +53,9 @@ def upload_csv_with_source_to_s3(remote_url, s3_bucket, s3_key, source_name):
     except Exception as e:
         print(f"❌ Error uploading CSV to S3: {e}")
 
-
 if __name__ == "__main__":
-    if not CSV_URL or not JSON_URL:
-        print("❌ Missing CSV_URL or JSON_URL environment variables")
+    if not CSV_URL:
+        print("❌ Missing CSV_URL environment variable")
         exit(1)
 
     source_name = os.getenv("DATA_SOURCE", "unknown").lower()  # Dynamically inject source name
@@ -69,7 +65,3 @@ if __name__ == "__main__":
     
     # Upload latest CSV with source column
     upload_csv_with_source_to_s3(CSV_URL, S3_BUCKET_NAME, csv_s3_key_latest, source_name)
-
-    # Upload JSON directly (unchanged)
-    upload_file_from_url_to_s3(JSON_URL, S3_BUCKET_NAME, json_s3_key_versioned)
-    upload_file_from_url_to_s3(JSON_URL, S3_BUCKET_NAME, json_s3_key_latest)
