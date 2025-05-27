@@ -3,7 +3,7 @@ import requests
 import os
 import datetime
 import pandas
-from io import ByteIO
+from io import BytesIO
 
 # Fetch AWS environment variables
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
