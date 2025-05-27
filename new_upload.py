@@ -58,7 +58,7 @@ if __name__ == "__main__":
         print("❌ Missing CSV_URL environment variable")
         exit(1)
 
-    source_name = os.getenv("DATA_SOURCE", "unknown").lower()  # Dynamically inject source name
+    source_name = os.getenv("DATA_SOURCE", "X(formely twitter)").lower()  # Dynamically inject source name
 
     # Upload versioned CSV with source column
     upload_csv_with_source_to_s3(CSV_URL, S3_BUCKET_NAME, csv_s3_key_versioned, source_name)
