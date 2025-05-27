@@ -3,8 +3,6 @@ name: Scrape and Upload
 # Trigger manually or daily at midnight UTC
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '30 20 * * *'
 
 jobs:
   scrape-upload:
