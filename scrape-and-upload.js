@@ -11,7 +11,7 @@ const {
   AWS_SECRET_ACCESS_KEY,
   AWS_REGION,
   S3_BUCKET_NAME
-} = JSON.parse(process.env.ALL_CREDENTIALS);
+} = JSON.parse(process.env.LINKEDIN_SCRAPING);
 
 // Configure AWS SDK
 AWS.config.update({
