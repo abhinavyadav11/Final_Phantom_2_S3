@@ -24,7 +24,7 @@ jobs:
       - name: Run scraper and capture URLs
         id: run-scraper
         env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+          ALL_CREDENTIALS: ${{ secrets.LINKEDIN_SCRAPING }}
         run: |
           node scrape-and-upload.js > output.json
           tail -n 1 output.json > urls.json
@@ -55,7 +55,7 @@ jobs:
 
       - name: Run Python upload script
         env:
-          ALL_CREDENTIALS: ${{ secrets.ALL_CREDENTIALS }}
+          ALL_CREDENTIALS: ${{ secrets.LINKEDIN_SCRAPING }}
           CSV_URL: ${{ env.CSV_URL }}
           JSON_URL: ${{ env.JSON_URL }}
         run: |
