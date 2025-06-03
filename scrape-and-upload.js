@@ -131,13 +131,13 @@ async function run() {
     console.log("✅ Phantom JSON URL:", jsonUrl);
 
     // Save full Phantom output locally
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `phantom_output_${timestamp}.json`;
-    fs.writeFileSync(fileName, JSON.stringify(resultRes, null, 2));
-    console.log(`💾 Output saved locally as ${fileName}`);
+    // const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    // const fileName = `phantom_output_${timestamp}.json`;
+    // fs.writeFileSync(fileName, JSON.stringify(resultRes, null, 2));
+    // console.log(`💾 Output saved locally as ${fileName}`);
 
     // Upload full output file to S3
-    await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
+    // await uploadToS3(fileName, S3_BUCKET_NAME, `phantom_outputs/${fileName}`);
 
     // Output the URLs as a JSON object to stdout for downstream steps
     console.log(JSON.stringify({ csvUrl, jsonUrl }));
