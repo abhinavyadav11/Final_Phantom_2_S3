@@ -1,4 +1,4 @@
-name: 2 Scrape and Upload
+name: LinkedIn Scrape and Upload
 
 # Trigger manually or daily at midnight UTC
 on:
