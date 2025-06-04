@@ -21,8 +21,8 @@ CSV_URL = os.getenv("CSV_URL")
 
 # Generate timestamp for versioning
 timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d_%H-%M-%S')
-csv_s3_key_versioned = f'phantombuster/data/result_{timestamp}.csv'
-csv_s3_key_latest = 'phantombuster/data/latest.csv'
+csv_s3_key_versioned = f'phantombuster/Twitter/result_{timestamp}.csv'
+csv_s3_key_latest = 'phantombuster/Twitter/latest.csv'
 
 def upload_csv_with_source_to_s3(remote_url, s3_bucket, s3_key, source_name):
     try:
